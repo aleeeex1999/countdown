@@ -1,0 +1,548 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Il nostro calendario</title>
+<style>
+  @font-face { font-family:"Crayons"; src:url("fonts/font.ttf") format("truetype"); font-display:swap; }
+  :root { --font:"Crayons", Georgia, "Times New Roman", serif; --ink:#3a2a22; --night:#1d2233; }
+  * { box-sizing: border-box; }
+
+  html, body { margin:0; height:100%; overflow:hidden; background:var(--night); font-family:var(--font); color:var(--ink); }
+  #fondo { position:fixed; inset:0; background: url("sfondo.jpg") center/cover no-repeat, linear-gradient(#2c3552, #6b4f5f 70%, #e9a46a); }
+  #layout { position:relative; z-index:1; display:flex; align-items:center; width:100%; height:100%; }
+  #area { flex:1; min-width:0; height:100%; display:flex; align-items:center; justify-content:center; }
+  #stage { --su:calc(var(--W) / 100); position:relative; flex:none; width:var(--W); aspect-ratio:var(--ratio); }
+
+  #segno { flex:none; position:relative; visibility:hidden; pointer-events:none; }
+  #segno.pronto { visibility:visible; }
+  #segno img { display:block; width:100%; height:100%; }
+
+  @supports (height:100dvh) { body { height:100dvh; } }
+
+  .door { position:absolute; width:calc(var(--lf) * 1%); transform:translate(-50%,-50%); padding:0; border:0; background:none;
+          cursor:pointer; line-height:0; font:inherit; transition:transform .2s, opacity .3s; }
+  .door:hover { transform:translate(-50%,-50%) scale(1.06); }
+  .door:focus-visible { outline:3px solid #fff; outline-offset:6px; }
+  .fg { display:block; position:relative; filter:drop-shadow(0 3px 5px rgba(0,0,0,.35));
+        animation:vibra 1s steps(1,end) infinite; animation-delay:var(--d); }
+  @keyframes vibra { 0%{transform:rotate(0deg)} 50%{transform:rotate(4deg)} 100%{transform:rotate(0deg)} }
+  .fg img { display:block; pointer-events:none; }
+  .foglietto { width:100%; height:auto; }
+  .pin { position:absolute; left:50%; top:var(--piny, 8%); width:var(--pinw, 22%); height:auto; transform:translate(-50%,-50%); }
+  .data { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+          line-height:1; color:var(--data); pointer-events:none; }
+  .data b { font-weight:400; font-size:calc(var(--lf) * .36 * var(--su) * var(--kd, 1)); }
+  .data i { font-style:normal; font-size:calc(var(--lf) * .18 * var(--su) * var(--kd, 1)); }
+  .door.locked { filter:grayscale(.8) brightness(.8); cursor:not-allowed; }
+  .door.locked:hover { transform:translate(-50%,-50%); }
+  .door.shake { animation:shake .4s; }
+  @keyframes shake { 20%,60%{translate:-6px 0} 40%,80%{translate:6px 0} }
+
+  #overlay { position:fixed; inset:0; display:none; background:rgba(15,18,30,.65); z-index:10; }
+  #overlay.on { display:block; }
+  #foglio { position:fixed; left:50%; top:50%; z-index:11; cursor:pointer; transform-style:preserve-3d; }
+  #foglio .fronte { position:absolute; inset:0; width:100%; height:100%; }
+  #foglio .retro { position:absolute; inset:0; transform:rotateY(180deg) translateZ(2px); backface-visibility:hidden;
+                   display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+                   gap:calc(var(--u) * 4); padding:calc(var(--u) * 11) calc(var(--u) * var(--mx, 18));
+                   font-size:calc(var(--u) * 7.5); line-height:1.25; color:var(--testo, var(--ink)); }
+  #foglio .scatto {
+    max-width: calc(var(--u) * 56);
+    max-height: 55%;
+    width: auto;
+    height: auto;
+    transform: rotate(-3deg);
+    box-shadow: 0 calc(var(--u) * .8) calc(var(--u) * 2.5) rgba(0,0,0,.35);
+    opacity: 1;
+    mix-blend-mode: normal;
+  }
+  
+  #foglio .retro {
+  opacity:1 !important;
+  filter: none !important;
+  }
+  
+  #foglio .did { white-space:pre-line; }
+  #foglio .nascosto { color:transparent; }
+
+  /* Etichetta delle canzoni: più piccola, in basso e leggermente decentrata */
+  #foglio .etichetta {
+    position:absolute;
+    right:18%;
+    bottom:18%;
+    width:calc(var(--u) * var(--le, 35));
+    display:block;
+    color:inherit;
+    text-decoration:none;
+    transform:rotate(-10deg);
+    transform-origin:center;
+    z-index:3;
+  }
+
+  #foglio .etichetta.base { background:#fff; padding:calc(var(--u) * 3); font-size:calc(var(--u) * 8); transform:rotate(-10deg);
+                            box-shadow:0 calc(var(--u) * .8) calc(var(--u) * 2.5) rgba(0,0,0,.3); }
+  #foglio .data { transform:translateZ(1px); backface-visibility:hidden; }
+  #foglio .data b { font-size:calc(var(--u) * 36 * var(--kd, 1)); }
+  #foglio .data i { font-size:calc(var(--u) * 18 * var(--kd, 1)); }
+  #foglio .pin { transform:translate(-50%,-50%) translateZ(2px); backface-visibility:hidden; }
+  #foglio .etichetta img { width:100%; display:block; }
+  /* Etichetta sulle fotografie */
+  #foglio .etichetta-foto {
+    position:absolute;
+    left:var(--ex, 50%);
+    top:var(--ey, 12%);
+    width:calc(var(--u) * var(--ew, 30));
+    display:block;
+    transform:translate(-50%, -50%) rotate(var(--er, 0deg));
+    transform-origin:center;
+    z-index:5;
+  }
+  
+  #foglio .etichetta-foto img {
+    width:100%;
+    display:block;
+  }
+  #foglio .etichetta .scritta { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; white-space:nowrap;
+                                font-size:calc(var(--u) * 7 * var(--ds, 1)); color:var(--scr, #000); pointer-events:none; }
+
+  #finale { position:absolute; left:calc(var(--rx) * 1%); top:calc(var(--ry) * 1%); width:calc(var(--rw) * 1%); height:calc(var(--rh) * 1%);
+            transform:translate(-50%,-50%) rotate(var(--rr)); display:flex; align-items:center; justify-content:center;
+            text-align:center; white-space:pre-line; line-height:1.25; color:var(--msg, #000); }
+
+  #bar { position:fixed; left:8px; top:8px; z-index:20; display:none; gap:8px; background:#fff; padding:8px; border-radius:8px; font:14px sans-serif; }
+  body.edit #bar { display:flex; align-items:center; }
+  body.edit .door { cursor:grab; touch-action:none; }
+  @media (prefers-reduced-motion: reduce) { .door { transition:none; } .fg { animation:none; } }
+</style>
+</head>
+<body>
+
+<div id="bar"><span>Modalità sposta: trascina i foglietti</span><button id="copy">Copia posizioni</button></div>
+<div id="fondo"></div>
+<div id="layout">
+  <div id="area"><div id="stage"></div></div>
+  <div id="segno"><img id="segnoimg" alt=""><div id="finale"><span></span></div></div>
+</div>
+<div id="overlay" role="dialog" aria-modal="true"></div>
+
+<script>
+/* =====================================================================
+   ✏️  QUI MODIFICHI TUTTO TU
+   ===================================================================== */
+const RATIO = 1.6;
+const ANNO = 2026;
+const SBLOCCA_TUTTO = true;
+
+// Disposizione dei foglietti
+const LARGHEZZA_FOGLIO = 15;   // buste più grandi
+const FILE = [5, 4, 5];
+const Y_RIGHE = [17, 48, 79];
+const PASSO_X = 19;
+
+// Disegni
+const FOGLI = { foto: "disegni/busta_1.png", canzone: "disegni/busta_2.png", messaggio: "disegni/busta_3.png" };
+const ETICHETTA = "disegni/etichetta.png";
+const LARGHEZZA_ETICHETTA = 35;   // etichetta più piccola
+const SCRITTA_ETICHETTA = "clicca qui";
+const COLORE_SCRITTA = "#000000";
+const DIMENSIONE_SCRITTA = 0.6;
+const MS_LETTERA = 35;
+const ETICHETTE_FOTO = {
+  "11-28": { x: 30, y: 20, larghezza: 35, rotazione: -200 },
+  "11-29": { x: 48, y: 22, larghezza: 35, rotazione: -10 },
+  "12-02": { x: 60, y: 30, larghezza: 35, rotazione: 20 },
+  "12-06": { x: 50, y: 32, larghezza: 35, rotazione: -170 },
+  "12-08": { x: 30, y: 30, larghezza: 35, rotazione: -50 }
+};
+
+// Puntina
+const PIN = "disegni/pin.png";
+const PIN_LARGHEZZA = 35;
+const PIN_ALTEZZA = 10;
+
+// Testi e grandezze
+const DIMENSIONE_DATA = 1.0;   // date più grandi del 25%
+const DIMENSIONE_TESTO = 0.6;
+const MARGINE_LATERALE = 18;
+const COLORE_TESTO = "#000000";
+const DIMENSIONE_MESSAGGIO = 1.0;
+
+const COLORE_DATE = "#000000";
+const COLORE_PAGINA = "#000000";
+const COLORE_MESSAGGIO = "#000000";
+const MESSAGGIO_FINALE = "una piccola sorpresa ogni giorno per quando sarò via!";
+
+// Cartello a destra
+const MESSAGGIO_IMG = "disegni/messaggio.png";
+const SEGNO_ALTEZZA = 60;   // cartello molto più piccolo
+const SEGNO_DAL_BORDO = 4;
+const SEGNO_LARGHEZZA_MAX = 60;
+const MESSAGGIO_RETTANGOLO = { x: 43.2, y: 34.8, w: 46, h: 44, rot: -16 };
+
+const GIORNI = [
+  { data:"11-26", tipo:"canzone",   brano:"hai due occhi giganti che luccicano, guardano i miei", link:"https://open.spotify.com/intl-it/track/39J4IyWQJWcBPU6tMnlD07?si=21a4ecfae375446f" },
+  { data:"11-27", tipo:"messaggio", msg:"i am looking inward and finding the image of caterina everywhere!" },
+  { data:"11-28", tipo:"foto",      img:"foto/28.png", didascalia:"la nostra prima serata da coppia romantica in quel di bologna" },
+  { data:"11-29", tipo:"foto",      img:"foto/29.png", didascalia:"si festeggia sempre il primo maggio!" },
+  { data:"11-30", tipo:"canzone",   brano:"this could be the end of wanting", link:"https://open.spotify.com/intl-it/track/6TSHGfV9E66qCNu4UP6xZu?si=21931ec4fbc44803" },
+  { data:"12-01", tipo:"messaggio", msg:"light of my eyes and delight of my soul that you are!" },
+  { data:"12-02", tipo:"foto",      img:"foto/2.png", didascalia:"UN ANNO INSIEMEEE" },
+  { data:"12-03", tipo:"canzone",   brano:"forever is a feeling and i know it well", link:"https://open.spotify.com/intl-it/track/0r1Hes7jhihnSh8ql9XGya?si=980945050bc34fe6" },
+  { data:"12-04", tipo:"messaggio", msg:"ti manco amore mio? tra una settimana sono da te... ci penso tutto il tempo! ti amooooo" },
+  { data:"12-05", tipo:"messaggio", msg:"i cannot allow myself any sort of happiness that does not, in some way or another, involve you." },
+  { data:"12-06", tipo:"foto",      img:"foto/6.png", didascalia:"io e mia moglie !!!" },
+  { data:"12-07", tipo:"canzone",   brano:"our days and nights are perfumed with obsession", link:"https://open.spotify.com/intl-it/track/5q4BpnMrYEFzLO0dYODj6J?si=a622c19c8309426c" },
+  { data:"12-08", tipo:"foto",      img:"foto/8.png", didascalia:"non vedo l'ora di passare tutto il resto dei nostri compleanni con te!" },
+  { data:"12-09", tipo:"messaggio", msg:"il mio viaggio giunge al termine e anche questo piccolo calendario! non vedo l'ora di rivederti amore mio dolce, a tra pochissimooooo" },
+];
+/* ===================== fine parte da modificare ===================== */
+
+const params = new URLSearchParams(location.search);
+const editMode = params.has("sposta");
+const unlockAll = SBLOCCA_TUTTO || params.has("prova");
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+if (editMode) document.body.classList.add("edit");
+
+const $ = id => document.getElementById(id);
+const stage = $("stage"), overlay = $("overlay"), area = $("area"), segno = $("segno"), segnoImg = $("segnoimg"), finale = $("finale");
+const root = document.documentElement;
+stage.style.setProperty("--ratio", RATIO);
+stage.style.setProperty("--lf", LARGHEZZA_FOGLIO);
+root.style.setProperty("--data", COLORE_DATE);
+root.style.setProperty("--night", COLORE_PAGINA);
+root.style.setProperty("--msg", COLORE_MESSAGGIO);
+finale.firstElementChild.textContent = MESSAGGIO_FINALE;
+root.style.setProperty("--pinw", PIN_LARGHEZZA + "%"); root.style.setProperty("--piny", PIN_ALTEZZA + "%");
+root.style.setProperty("--kd", DIMENSIONE_DATA); root.style.setProperty("--mx", MARGINE_LATERALE);
+root.style.setProperty("--testo", COLORE_TESTO); root.style.setProperty("--dm", DIMENSIONE_MESSAGGIO); root.style.setProperty("--le", LARGHEZZA_ETICHETTA);
+root.style.setProperty("--scr", COLORE_SCRITTA); root.style.setProperty("--ds", DIMENSIONE_SCRITTA);
+
+/* Carica le foto originali senza modificarne opacità o colori */
+GIORNI.forEach(g => {
+  if (g.img) {
+    const im = new Image();
+    im.src = g.img;
+  }
+});
+
+[...Object.values(FOGLI), ETICHETTA, PIN].filter(Boolean).forEach(src => { new Image().src = src; });
+
+let opened = [];
+try { opened = JSON.parse(localStorage.getItem("aperti") || "[]"); } catch (e) {}
+
+const MESI_BREVI = ["GEN","FEB","MAR","APR","MAG","GIU","LUG","AGO","SET","OTT","NOV","DIC"];
+const num = g => parseInt(g.data.split("-")[1], 10);
+const mese = g => MESI_BREVI[parseInt(g.data.split("-")[0], 10) - 1];
+const oggiInItalia = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const isUnlocked = g => unlockAll || oggiInItalia() >= `${ANNO}-${g.data}`;
+const refreshers = [];
+setInterval(() => refreshers.forEach(f => f()), 30000);
+
+function el(tag, props, parent) { const e = Object.assign(document.createElement(tag), props); parent.appendChild(e); return e; }
+
+// Posizioni automatiche
+const auto = [];
+FILE.forEach((n, r) => { for (let j = 0; j < n; j++) auto.push([50 + (j - (n - 1) / 2) * PASSO_X, Y_RIGHE[r]]); });
+
+GIORNI.forEach((g, i) => {
+  g.pos = g.pos || auto[i] || [50, 50];
+  const b = document.createElement("button");
+  b.className = "door";
+  const fg = el("span", { className: "fg" }, b);
+  fg.style.setProperty("--d", `-${Math.random().toFixed(2)}s`);
+  el("img", { className: "foglietto", src: FOGLI[g.tipo], alt: "", draggable: false }, fg);
+  const d = el("span", { className: "data" }, fg);
+  el("b", { textContent: num(g) }, d);
+  el("i", { textContent: mese(g) }, d);
+  if (PIN) el("img", { className: "pin", src: PIN, alt: "", draggable: false }, fg);
+  b.style.left = g.pos[0] + "%";
+  b.style.top = g.pos[1] + "%";
+  b.setAttribute("aria-label", `${num(g)} ${mese(g)}`);
+  const refresh = () => {
+    b.classList.toggle("locked", !isUnlocked(g));
+    b.classList.toggle("opened", opened.includes(g.data));
+  };
+  refresh();
+  refreshers.push(refresh);
+  if (editMode) makeDraggable(b, g);
+  else b.addEventListener("click", () => {
+    if (!isUnlocked(g)) { b.classList.remove("shake"); void b.offsetWidth; b.classList.add("shake"); return; }
+    openGift(g, b);
+    if (!opened.includes(g.data)) {
+      opened.push(g.data);
+      try { localStorage.setItem("aperti", JSON.stringify(opened)); } catch (e) {}
+    }
+    refresh();
+  });
+  stage.appendChild(b);
+});
+
+/* Macchina da scrivere */
+let tok = 0;
+function prepara(box, testo) {
+  box.innerHTML = "";
+  el("span", {}, box);
+  el("span", { className: "nascosto", textContent: testo }, box);
+}
+function scrivi(box, testo) {
+  const id = ++tok, [a, b] = box.children;
+  if (reduceMotion) { a.textContent = testo; b.textContent = ""; return; }
+  let n = 0;
+  const t = setInterval(() => {
+    if (id !== tok) return clearInterval(t);
+    n++;
+    a.textContent = testo.slice(0, n);
+    b.textContent = testo.slice(n);
+    if (n >= testo.length) clearInterval(t);
+  }, MS_LETTERA);
+}
+
+/* Apertura */
+let foglioEl = null, portaCorrente = null, pronto = false, chiudendo = false;
+const PERSP = "perspective(1400px)";
+const FINE = `${PERSP} rotateY(180deg)`;
+const PIN_DENTRO = "translate(-50%,-50%)";
+const PIN_FUORI = "translate(-50%,-50%) translate(70%,-160%) scale(1.8) rotate(35deg)";
+
+function trasformaDa(doorImg, W) {
+  const r = doorImg.getBoundingClientRect();
+  const dx = r.left + r.width / 2 - root.clientWidth / 2, dy = r.top + r.height / 2 - innerHeight / 2;
+  return `${PERSP} translate(${dx}px,${dy}px) scale(${r.width / W}) rotateY(0deg)`;
+}
+
+function openGift(g, doorEl) {
+  const doorImg = doorEl.querySelector("img");
+  const ar = (doorImg.naturalWidth / doorImg.naturalHeight) || 1;
+  const W = Math.min(root.clientWidth * .88, 560, innerHeight * .84 * ar), H = W / ar;
+  const da = trasformaDa(doorImg, W);
+  portaCorrente = doorEl;
+  pronto = false;
+  doorEl.style.visibility = "hidden";
+  overlay.classList.add("on");
+
+  const fg = foglioEl = el("div", { id: "foglio" }, overlay);
+  Object.assign(fg.style, { width: W + "px", height: H + "px", marginLeft: -W / 2 + "px", marginTop: -H / 2 + "px" });
+  fg.style.setProperty("--u", W / 100 + "px");
+  el("img", { className: "fronte", src: FOGLI[g.tipo], alt: "" }, fg);
+  const dd = el("span", { className: "data" }, fg);
+  el("b", { textContent: num(g) }, dd);
+  el("i", { textContent: mese(g) }, dd);
+  const pinBig = PIN ? el("img", { className: "pin", src: PIN, alt: "" }, fg) : null;
+
+  const retro = el("div", { className: "retro" }, fg);
+  const testo = g.tipo === "foto" ? (g.didascalia || "") : g.tipo === "canzone" ? (g.brano || "") : (g.msg || "");
+  const fs = (g.tipo === "messaggio" ? (testo.length > 100 ? 5.6 : testo.length > 60 ? 7 : 8.5) : 7) * DIMENSIONE_TESTO;
+  retro.style.fontSize = `calc(var(--u) * ${fs})`;
+
+  /* Foto originali: nessun ridimensionamento Canvas */
+/* Foto originali: nessun ridimensionamento Canvas */
+  if (g.tipo === "foto") {
+    el("img", {
+      className: "scatto",
+      src: g.img,
+      alt: testo
+    }, retro);
+  
+    // Etichetta personalizzata sulla fotografia
+    const posizione = ETICHETTE_FOTO[g.data];
+  
+    if (posizione) {
+      const etichetta = el("span", {
+        className: "etichetta-foto"
+      }, retro);
+  
+      etichetta.style.setProperty("--ex", posizione.x + "%");
+      etichetta.style.setProperty("--ey", posizione.y + "%");
+      etichetta.style.setProperty("--ew", posizione.larghezza);
+      etichetta.style.setProperty("--er", posizione.rotazione + "deg");
+  
+      const im = el("img", {
+        src: etichettaPronta || ETICHETTA,
+        alt: ""
+      }, etichetta);
+  
+      im.onerror = () => etichetta.remove();
+    }
+  }
+
+  const did = el("div", { className: "did" }, retro);
+  prepara(did, testo);
+
+  if (g.tipo === "canzone") {
+    const a = el("a", { className: "etichetta", href: g.link, target: "_blank", rel: "noopener" }, retro);
+    const im = el("img", { src: etichettaPronta || ETICHETTA, alt: "clicca qui!" }, a);
+    if (SCRITTA_ETICHETTA) el("span", { className: "scritta", textContent: SCRITTA_ETICHETTA }, a);
+    im.onerror = () => { im.remove(); a.classList.add("base"); a.textContent = "clicca qui!"; };
+  }
+
+  fg.style.transform = FINE;
+  const fatto = () => { pronto = true; scrivi(did, testo); };
+  if (reduceMotion) { if (pinBig) pinBig.style.display = "none"; return fatto(); }
+  if (pinBig) pinBig.animate([{ transform: PIN_DENTRO + " translateZ(2px)", opacity: 1 }, { transform: PIN_FUORI + " translateZ(2px)", opacity: 0 }],
+    { duration: 500, easing: "ease-in", fill: "forwards" });
+  fg.animate([{ transform: da }, { transform: FINE }],
+    { duration: 1000, delay: 200, fill: "backwards", easing: "cubic-bezier(.3,.7,.2,1)" }).onfinish = fatto;
+}
+
+/* Chiusura */
+function closeGift() {
+  const fg = foglioEl;
+  if (!fg || !pronto || chiudendo) return;
+  chiudendo = true;
+  tok++;
+  const fine = () => {
+    fg.remove();
+    foglioEl = null;
+    portaCorrente.style.visibility = "";
+    const pin = portaCorrente.querySelector(".pin");
+    if (pin && !reduceMotion) pin.animate([{ transform: PIN_FUORI, opacity: 0 }, { transform: PIN_DENTRO, opacity: 1 }], { duration: 350, easing: "ease-out" });
+    overlay.classList.remove("on");
+    chiudendo = false;
+    pronto = false;
+  };
+  if (reduceMotion) return fine();
+  const a = trasformaDa(portaCorrente.querySelector("img"), fg.offsetWidth);
+  overlay.animate([{ backgroundColor: "rgba(15,18,30,.65)" }, { backgroundColor: "rgba(15,18,30,0)" }], { duration: 800 });
+  fg.animate([{ transform: FINE }, { transform: a }], { duration: 800, easing: "cubic-bezier(.5,0,.2,1)", fill: "forwards" }).onfinish = fine;
+}
+overlay.addEventListener("click", e => { if (!e.target.closest("a")) closeGift(); });
+addEventListener("keydown", e => { if (e.key === "Escape") closeGift(); });
+
+/* Layout */
+let segnoAr = 0.865;
+Object.entries(MESSAGGIO_RETTANGOLO).forEach(([k, v]) => finale.style.setProperty("--r" + ({ x: "x", y: "y", w: "w", h: "h", rot: "r" })[k], k === "rot" ? v + "deg" : v));
+
+function ritagliaImmagine(src) {
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      let out = { src, ar: im.naturalWidth / im.naturalHeight };
+      try {
+        const w = im.naturalWidth, h = im.naturalHeight, c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const x = c.getContext("2d"); x.drawImage(im, 0, 0);
+        const d = x.getImageData(0, 0, w, h).data;
+        let x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (let y = 0; y < h; y++) for (let i = 0; i < w; i++) if (d[(y * w + i) * 4 + 3] > 20) {
+          if (i < x0) x0 = i;
+          if (i > x1) x1 = i;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+        if (x1 >= 0) {
+          const o = document.createElement("canvas");
+          o.width = x1 - x0 + 1; o.height = y1 - y0 + 1;
+          o.getContext("2d").drawImage(c, x0, y0, o.width, o.height, 0, 0, o.width, o.height);
+          out = { src: o.toDataURL("image/png"), ar: o.width / o.height };
+        }
+      } catch (e) {}
+      res(out);
+    };
+    im.onerror = () => res(null);
+    im.src = src;
+  });
+}
+
+function adattaTesto() {
+  const t = finale.firstElementChild;
+  let fz = segno.offsetHeight * 0.05 * DIMENSIONE_MESSAGGIO;
+  finale.style.fontSize = fz + "px";
+  for (let i = 0; i < 40 && fz > 7 && t.offsetHeight > finale.clientHeight; i++) {
+    fz *= 0.94;
+    finale.style.fontSize = fz + "px";
+  }
+}
+function disponi() {
+  const h = Math.min(innerHeight * SEGNO_ALTEZZA / 100, root.clientWidth * SEGNO_LARGHEZZA_MAX / 100 / segnoAr);
+  segno.style.height = h + "px";
+  segno.style.width = h * segnoAr + "px";
+  segno.style.marginRight = root.clientWidth * SEGNO_DAL_BORDO / 100 + "px";
+  const r = area.getBoundingClientRect();
+  stage.style.setProperty("--W", Math.min(r.width, r.height * RATIO) + "px");
+  adattaTesto();
+}
+
+/* Preparazione etichetta */
+let etichettaPronta = null;
+function preparaEtichetta(src) {
+  return new Promise(res => {
+    const im = new Image();
+    im.onerror = () => res(null);
+    im.onload = () => {
+      try {
+        const w = im.naturalWidth, h = im.naturalHeight, c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const x = c.getContext("2d", { willReadFrequently: true });
+        x.drawImage(im, 0, 0);
+        const dati = x.getImageData(0, 0, w, h), d = dati.data;
+        const vuoto = p => d[p * 4 + 3] < 20 || (d[p * 4] > 235 && d[p * 4 + 1] > 235 && d[p * 4 + 2] > 235);
+        const vis = new Uint8Array(w * h), st = new Int32Array(w * h);
+        let sp = 0;
+        const push = p => { if (!vis[p] && vuoto(p)) { vis[p] = 1; st[sp++] = p; } };
+        for (let i = 0; i < w; i++) { push(i); push((h - 1) * w + i); }
+        for (let j = 0; j < h; j++) { push(j * w); push(j * w + w - 1); }
+        while (sp) {
+          const p = st[--sp], px = p % w;
+          if (px > 0) push(p - 1);
+          if (px < w - 1) push(p + 1);
+          if (p >= w) push(p - w);
+          if (p < w * (h - 1)) push(p + w);
+        }
+        let x0 = w, y0 = h, x1 = -1, y1 = -1, resto = 0;
+        for (let p = 0; p < w * h; p++) {
+          if (vis[p]) { d[p * 4 + 3] = 0; continue; }
+          resto++;
+          const px = p % w, py = (p - px) / w;
+          if (px < x0) x0 = px;
+          if (px > x1) x1 = px;
+          if (py < y0) y0 = py;
+          if (py > y1) y1 = py;
+        }
+        if (resto < w * h * 0.005) return res(null);
+        x.putImageData(dati, 0, 0);
+        const o = document.createElement("canvas");
+        o.width = x1 - x0 + 1; o.height = y1 - y0 + 1;
+        o.getContext("2d").drawImage(c, x0, y0, o.width, o.height, 0, 0, o.width, o.height);
+        res(o.toDataURL("image/png"));
+      } catch (e) { res(null); }
+    };
+    im.src = src;
+  });
+}
+if (ETICHETTA) preparaEtichetta(ETICHETTA).then(u => { etichettaPronta = u; });
+
+if (MESSAGGIO_IMG) ritagliaImmagine(MESSAGGIO_IMG).then(r => {
+  if (r) { segnoImg.src = r.src; segnoAr = r.ar; } else segnoImg.style.display = "none";
+  segno.classList.add("pronto");
+  disponi();
+});
+else segno.style.display = "none";
+addEventListener("resize", disponi);
+disponi();
+
+/* Modalità sposta */
+function makeDraggable(b, g) {
+  b.addEventListener("pointerdown", e => {
+    b.setPointerCapture(e.pointerId);
+    const move = ev => {
+      const r = stage.getBoundingClientRect();
+      g.pos[0] = Math.round(Math.min(100, Math.max(0, (ev.clientX - r.left) / r.width * 100)) * 10) / 10;
+      g.pos[1] = Math.round(Math.min(100, Math.max(0, (ev.clientY - r.top) / r.height * 100)) * 10) / 10;
+      b.style.left = g.pos[0] + "%";
+      b.style.top = g.pos[1] + "%";
+    };
+    const up = () => { b.removeEventListener("pointermove", move); b.removeEventListener("pointerup", up); };
+    b.addEventListener("pointermove", move);
+    b.addEventListener("pointerup", up);
+  });
+}
+$("copy").addEventListener("click", () => {
+  const txt = GIORNI.map(g => `${g.data}: pos:[${g.pos[0]},${g.pos[1]}]`).join("\n");
+  navigator.clipboard.writeText(txt).then(() => alert("Copiato! Incollami le posizioni in chat oppure aggiungi pos:[x,y] al giorno nel file."));
+});
+</script>
+</body>
+</html>
