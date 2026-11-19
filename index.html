@@ -37,7 +37,10 @@
           line-height:1; color:var(--data); pointer-events:none; }
   .data b { font-weight:400; font-size:calc(var(--lf) * .36 * var(--su) * var(--kd, 1)); }
   .data i { font-style:normal; font-size:calc(var(--lf) * .18 * var(--su) * var(--kd, 1)); }
-  .door.locked { filter:grayscale(.8) brightness(.8); cursor:not-allowed; }
+  .door.locked {
+  filter: none;
+  cursor: not-allowed;
+  }
   .door.locked:hover { transform:translate(-50%,-50%); }
   .door.shake { animation:shake .4s; }
   @keyframes shake { 20%,60%{translate:-6px 0} 40%,80%{translate:6px 0} }
