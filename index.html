@@ -204,7 +204,9 @@ const GIORNI = [
 const params = new URLSearchParams(location.search);
 const editMode = params.has("sposta");
 const unlockAll = SBLOCCA_TUTTO || params.has("prova");
-const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const reduceMotion = window.matchMedia
+  ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  : false;
 if (editMode) document.body.classList.add("edit");
 
 const $ = id => document.getElementById(id);
@@ -251,22 +253,24 @@ const oggiInItalia = () => {
   } catch (e) {
     // Fallback: usa la data locale del computer
     const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    const m = now.getMonth() + 1;
+    const d = now.getDate();
+    
+    return `${y}-${m < 10 ? "0" + m : m}-${d < 10 ? "0" + d : d}`;
   }
 };
 
+// Controllo delle date: le caselle si sbloccano al giorno giusto
 const isUnlocked = g =>
   unlockAll || oggiInItalia() >= `${ANNO}-${g.data}`;
 
+// Funzioni per aggiornare lo stato delle caselle
 const refreshers = [];
 
-// Controlla frequentemente se è arrivato un nuovo giorno
-setInterval(() => refreshers.forEach(f => f()), 1000);
-const isUnlocked = g => unlockAll || oggiInItalia() >= `${ANNO}-${g.data}`;
-const refreshers = [];
-setInterval(() => refreshers.forEach(f => f()), 30000);
+// Controlla ogni secondo se è arrivato un nuovo giorno
+setInterval(() => {
+  refreshers.forEach(f => f());
+}, 1000);
 
 function el(tag, props, parent) { const e = Object.assign(document.createElement(tag), props); parent.appendChild(e); return e; }
 
