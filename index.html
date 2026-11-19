@@ -237,7 +237,33 @@ try { opened = JSON.parse(localStorage.getItem("aperti") || "[]"); } catch (e) {
 const MESI_BREVI = ["GEN","FEB","MAR","APR","MAG","GIU","LUG","AGO","SET","OTT","NOV","DIC"];
 const num = g => parseInt(g.data.split("-")[1], 10);
 const mese = g => MESI_BREVI[parseInt(g.data.split("-")[0], 10) - 1];
-const oggiInItalia = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+// Data corrente in Italia, con fallback per browser vecchi
+const oggiInItalia = () => {
+  const now = new Date();
+
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Rome",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(now);
+  } catch (e) {
+    // Fallback: usa la data locale del computer
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+};
+
+const isUnlocked = g =>
+  unlockAll || oggiInItalia() >= `${ANNO}-${g.data}`;
+
+const refreshers = [];
+
+// Controlla frequentemente se è arrivato un nuovo giorno
+setInterval(() => refreshers.forEach(f => f()), 1000);
 const isUnlocked = g => unlockAll || oggiInItalia() >= `${ANNO}-${g.data}`;
 const refreshers = [];
 setInterval(() => refreshers.forEach(f => f()), 30000);
